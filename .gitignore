@@ -1,0 +1,14 @@
+# Visual Studio / .NET build output
+**/bin/
+**/obj/
+release/
+
+# FFmpeg binaries are distributable locally but too large for source history.
+# Keep the GPL license and build notes tracked.
+tools/*.exe
+
+dotnet-home/
+.appdata/
+.nuget/
+*.user
+*.suo
