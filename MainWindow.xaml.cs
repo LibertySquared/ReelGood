@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -27,6 +28,7 @@ public partial class MainWindow : Window
     private readonly string _settingsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelGood");
     private string? _videoPath;
     private string? _ffmpegPath;
+    private readonly Task<string?> _engineInitialization;
     private Process? _captureProcess;
     private string? _captureOutputPath;
     private Canvas? _ruler;
@@ -49,10 +51,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         CueList.ItemsSource = _cues;
-        // Prefer the copy shipped with ReelGood so an old per-user setting cannot
-        // silently select a missing or incompatible FFmpeg installation.
-        _ffmpegPath = ResolveFfmpeg();
-        EngineStatus.Text = _ffmpegPath is null ? "Choose FFmpeg to enable track extraction and recording." : $"Media engine ready · {Path.GetFileName(_ffmpegPath)}";
+        EngineStatus.Text = "Preparing built-in media engine…";
+        _engineInitialization = InitializeBundledEngineAsync();
         BuildTimeline();
         _clock.Tick += (_, _) => UpdateClock();
         _clock.Start();
@@ -83,7 +83,7 @@ public partial class MainWindow : Window
             CueSummary.Text = "Import audio tracks to enable independent scanning.";
             StatusText.Text = "Video loaded. Track probing runs when you choose Extract audio.";
             BuildTimeline();
-            if (_ffmpegPath is not null) await ProbeTracksAsync();
+            if (await EnsureEngineAsync()) await ProbeTracksAsync();
         }
         catch (Exception ex) { StatusText.Text = $"Could not load this video: {ex.Message}"; }
     }
@@ -158,7 +158,7 @@ public partial class MainWindow : Window
 
     private async void ExtractAudio_Click(object sender, RoutedEventArgs e)
     {
-        if (!EnsureEngine() || _videoPath is null) return;
+        if (!await EnsureEngineAsync() || _videoPath is null) return;
         SetBusy(true, "Inspecting audio streams…");
         try
         {
@@ -190,7 +190,7 @@ public partial class MainWindow : Window
 
     private async void Analyze_Click(object sender, RoutedEventArgs e)
     {
-        if (!EnsureEngine() || _videoPath is null) return;
+        if (!await EnsureEngineAsync() || _videoPath is null) return;
         SetBusy(true, "Checking audio tracks…");
         try
         {
@@ -230,7 +230,7 @@ public partial class MainWindow : Window
 
     private async Task ProbeTracksAsync()
     {
-        if (_videoPath is null || !EnsureEngine()) return;
+        if (_videoPath is null || !await EnsureEngineAsync()) return;
         var probe = Path.Combine(Path.GetDirectoryName(_ffmpegPath!)!, OperatingSystem.IsWindows() ? "ffprobe.exe" : "ffprobe");
         if (!File.Exists(probe)) throw new FileNotFoundException("ffprobe.exe must be beside ffmpeg.exe to inspect separate tracks.", probe);
         var result = await RunProcessAsync(probe, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index,codec_name,channels:stream_tags=title,language", "-of", "json", _videoPath]);
@@ -461,23 +461,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void ChooseEngine_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFileDialog { Title = "Choose ffmpeg.exe", Filter = "FFmpeg executable|ffmpeg.exe|All files|*.*", CheckFileExists = true };
-        if (dialog.ShowDialog(this) != true) return;
-        if (!HasAdjacentProbe(dialog.FileName))
-        {
-            MessageBox.Show(this, "ffprobe.exe must be in the same folder as ffmpeg.exe. Choose the tools folder shipped with ReelGood.", "FFmpeg pair not found", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        _ffmpegPath = dialog.FileName; Directory.CreateDirectory(_settingsDirectory); await File.WriteAllTextAsync(Path.Combine(_settingsDirectory, "ffmpeg-path.txt"), _ffmpegPath);
-        EngineStatus.Text = $"Media engine ready · {Path.GetFileName(_ffmpegPath)}";
-    }
-
     private async void Record_Click(object sender, RoutedEventArgs e)
     {
         if (_captureProcess is not null) { await StopCaptureAsync(); return; }
-        if (!EnsureEngine()) return;
+        if (!await EnsureEngineAsync()) return;
         if (SystemAudioCheck.IsChecked != true && MicCheck.IsChecked != true) { StatusText.Text = "Choose at least one audio source."; return; }
         var dialog = new SaveFileDialog { Title = "Save screen recording", FileName = $"ReelGood-{DateTime.Now:yyyyMMdd-HHmmss}.mp4", Filter = "MP4 video|*.mp4" };
         if (dialog.ShowDialog(this) != true) return;
@@ -519,7 +506,7 @@ public partial class MainWindow : Window
     private async void ExportClip_Click(object sender, RoutedEventArgs e)
     {
         if (_videoPath is null) { StatusText.Text = "Import a video before exporting."; return; }
-        if (!EnsureEngine()) return;
+        if (!await EnsureEngineAsync()) return;
         if (_clipEndSeconds - _clipStartSeconds < .25) { StatusText.Text = "Choose a longer trim range."; return; }
         var dialog = new SaveFileDialog { Title = "Export trimmed video", FileName = $"{Path.GetFileNameWithoutExtension(_videoPath)}_edit.mp4", Filter = "MP4 video|*.mp4" };
         if (dialog.ShowDialog(this) != true) return;
@@ -570,17 +557,69 @@ public partial class MainWindow : Window
     {
         Mouse.OverrideCursor = busy ? Cursors.Wait : null; if (message is not null) StatusText.Text = message;
     }
-    private bool EnsureEngine()
+    private async Task<bool> EnsureEngineAsync()
     {
-        if (!HasAdjacentProbe(_ffmpegPath)) _ffmpegPath = ResolveFfmpeg();
+        try { _ffmpegPath = await _engineInitialization; }
+        catch (Exception ex)
+        {
+            EngineStatus.Text = "Built-in media engine unavailable";
+            StatusText.Text = $"Could not prepare ReelGood's built-in FFmpeg tools: {ex.Message}";
+            return false;
+        }
         if (HasAdjacentProbe(_ffmpegPath))
         {
             EngineStatus.Text = $"Media engine ready · {Path.GetFileName(_ffmpegPath)}";
             return true;
         }
-        EngineStatus.Text = "FFmpeg not found";
-        StatusText.Text = $"Couldn't locate FFmpeg and FFprobe in ReelGood's app folders (starting at {AppContext.BaseDirectory}). Choose ffmpeg.exe from a folder that also contains ffprobe.exe.";
+        EngineStatus.Text = "Built-in media engine unavailable";
+        StatusText.Text = "ReelGood could not find its built-in FFmpeg tools. Reinstall the app to restore them.";
         return false;
+    }
+
+    private async Task<string?> InitializeBundledEngineAsync()
+    {
+        try
+        {
+            var installFolder = Path.Combine(_settingsDirectory, "tools");
+            var ffmpeg = Path.Combine(installFolder, "ffmpeg.exe");
+            var ffprobe = Path.Combine(installFolder, "ffprobe.exe");
+            var assembly = Assembly.GetExecutingAssembly();
+            var resources = new[] { (Name: "ReelGood.tools.ffmpeg.exe", Path: ffmpeg), (Name: "ReelGood.tools.ffprobe.exe", Path: ffprobe) };
+
+            var needsInstall = false;
+            foreach (var item in resources)
+            {
+                using var embedded = assembly.GetManifestResourceStream(item.Name)
+                    ?? throw new FileNotFoundException($"Embedded media tool {item.Name} is missing.");
+                if (!File.Exists(item.Path) || new FileInfo(item.Path).Length != embedded.Length) needsInstall = true;
+            }
+            if (needsInstall)
+            {
+                Directory.CreateDirectory(installFolder);
+                foreach (var item in resources)
+                {
+                    var temporary = item.Path + ".new";
+                    await Task.Run(() =>
+                    {
+                        using var source = assembly.GetManifestResourceStream(item.Name)
+                            ?? throw new FileNotFoundException($"Embedded media tool {item.Name} is missing.");
+                        using var target = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
+                        source.CopyTo(target);
+                    });
+                    File.Move(temporary, item.Path, true);
+                }
+            }
+            if (!HasAdjacentProbe(ffmpeg)) throw new FileNotFoundException("The built-in FFmpeg tools did not install correctly.");
+            EngineStatus.Text = "Built-in media engine ready";
+            return ffmpeg;
+        }
+        catch
+        {
+            // Allow source builds without embedded tools to use an existing local installation.
+            var fallback = FindFfmpeg();
+            if (fallback is not null) { EngineStatus.Text = "Media engine ready · system FFmpeg"; return fallback; }
+            throw;
+        }
     }
 
     private async Task RunFfmpegAsync(IEnumerable<string> args)
@@ -598,27 +637,6 @@ public partial class MainWindow : Window
         var start = new ProcessStartInfo(file) { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         foreach (var arg in args) start.ArgumentList.Add(arg);
         using var process = new Process { StartInfo = start }; process.Start(); var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync(); await process.WaitForExitAsync(); return (await stdout, await stderr, process.ExitCode);
-    }
-    private string? LoadEnginePath()
-    {
-        try { var file = Path.Combine(_settingsDirectory, "ffmpeg-path.txt"); if (File.Exists(file)) { var value = File.ReadAllText(file).Trim(); if (HasAdjacentProbe(value)) return value; } } catch { }
-        return null;
-    }
-    private string? ResolveFfmpeg()
-    {
-        // Search the executable folder and its parents so a copied launcher can
-        // still find the adjacent packaged tools without relying on PATH or settings.
-        for (var folder = new DirectoryInfo(AppContext.BaseDirectory); folder is not null; folder = folder.Parent)
-        {
-            foreach (var bundled in new[]
-            {
-                Path.Combine(folder.FullName, "tools", "ffmpeg.exe"),
-                Path.Combine(folder.FullName, "ReelGood", "tools", "ffmpeg.exe"),
-                Path.Combine(folder.FullName, "ReelGood", "release", "tools", "ffmpeg.exe")
-            })
-                if (HasAdjacentProbe(bundled)) return bundled;
-        }
-        return LoadEnginePath() ?? FindFfmpeg();
     }
     private static string? FindFfmpeg()
     {
@@ -644,3 +662,4 @@ public partial class MainWindow : Window
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 }
+
