@@ -14,7 +14,7 @@
     <Border Grid.Row="0" Style="{StaticResource PanelBorder}" Margin="0,0,0,8" Padding="14,7">
       <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Width="34" Height="34" Background="#2A321D" CornerRadius="17" BorderBrush="#687939" BorderThickness="1"><TextBlock Text="◉" Foreground="{StaticResource Lime}" FontSize="21" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><StackPanel Margin="10,0,0,0"><TextBlock Text="ReelGood" FontSize="16" FontWeight="Bold"/><TextBlock Text="VIDEO WORKSPACE" FontSize="9" Foreground="{StaticResource Muted}"/></StackPanel></StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="＋  Import media" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="Import_Click"/><Button Content="Extract audio" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="ExtractAudio_Click"/><Button Content="✦  Scan cues" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="Analyze_Click"/><Button x:Name="RecordButton" Content="●  Record" Style="{StaticResource ActionButton}" Background="#E84D65" BorderBrush="#E84D65" Click="Record_Click"/><Button Content="⚙" ToolTip="Choose FFmpeg media engine" Style="{StaticResource ActionButton}" Margin="7,0,0,0" Padding="9,8" Click="ChooseEngine_Click"/></StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center"><Button Content="＋  Import media" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="Import_Click"/><Button Content="Extract audio" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="ExtractAudio_Click"/><Button Content="✦  Scan cues" Style="{StaticResource ActionButton}" Margin="0,0,7,0" Click="Analyze_Click"/><Button x:Name="RecordButton" Content="●  Record" Style="{StaticResource ActionButton}" Background="#E84D65" BorderBrush="#E84D65" Click="Record_Click"/></StackPanel>
       </Grid>
     </Border>
     <Grid Grid.Row="1" Margin="0,0,0,7"><Grid.ColumnDefinitions><ColumnDefinition Width="230" MinWidth="185"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*" MinWidth="380"/><ColumnDefinition Width="6"/><ColumnDefinition Width="315" MinWidth="260"/></Grid.ColumnDefinitions>
@@ -29,3 +29,4 @@
     <Grid Grid.Row="4" Margin="2,5,2,0"><TextBlock x:Name="StatusText" Text="Ready · Local project" Foreground="#A8CE71" FontSize="9"/><TextBlock Text="ReelGood Studio · WINDOWS DESKTOP" Foreground="#737A80" FontSize="9" HorizontalAlignment="Right"/></Grid>
   </Grid>
 </Window>
+
