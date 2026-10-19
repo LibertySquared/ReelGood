@@ -576,8 +576,13 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private async Task<string?> InitializeBundledEngineAsync()
+    private Task<string?> InitializeBundledEngineAsync() => Task.Run<string?>(() =>
     {
+        var logFile = Path.Combine(_settingsDirectory, "engine-startup.log");
+        void Log(string message)
+        {
+            try { Directory.CreateDirectory(_settingsDirectory); File.AppendAllText(logFile, $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}"); } catch { }
+        }
         try
         {
             var installFolder = Path.Combine(_settingsDirectory, "tools");
@@ -598,29 +603,30 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(installFolder);
                 foreach (var item in resources)
                 {
-                    var temporary = item.Path + ".new";
-                    await Task.Run(() =>
+                    Log($"Extracting {item.Name}");
+                    using (var source = assembly.GetManifestResourceStream(item.Name)
+                        ?? throw new FileNotFoundException($"Embedded media tool {item.Name} is missing."))
                     {
-                        using var source = assembly.GetManifestResourceStream(item.Name)
-                            ?? throw new FileNotFoundException($"Embedded media tool {item.Name} is missing.");
-                        using var target = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None);
+                        using var target = new FileStream(item.Path, FileMode.Create, FileAccess.Write, FileShare.None);
                         source.CopyTo(target);
-                    });
-                    File.Move(temporary, item.Path, true);
+                    }
+                    Log($"Extracted {item.Name}");
+                    Log($"Installed {item.Name}");
                 }
             }
             if (!HasAdjacentProbe(ffmpeg)) throw new FileNotFoundException("The built-in FFmpeg tools did not install correctly.");
-            EngineStatus.Text = "Built-in media engine ready";
+            Log("Media tools ready");
             return ffmpeg;
         }
-        catch
+        catch (Exception ex)
         {
+            Log($"Bundled media tool setup failed: {ex}");
             // Allow source builds without embedded tools to use an existing local installation.
             var fallback = FindFfmpeg();
-            if (fallback is not null) { EngineStatus.Text = "Media engine ready · system FFmpeg"; return fallback; }
+            if (fallback is not null) return fallback;
             throw;
         }
-    }
+    });
 
     private async Task RunFfmpegAsync(IEnumerable<string> args)
     {
