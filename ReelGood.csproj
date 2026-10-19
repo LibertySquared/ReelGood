@@ -9,9 +9,12 @@
     <ApplicationIcon>Resources\reelgood.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="tools\ffmpeg.exe;tools\ffprobe.exe;tools\FFmpeg-GPLv3-LICENSE.txt;tools\FFmpeg-build-notes.txt">
+    <EmbeddedResource Include="tools\ffmpeg.exe" LogicalName="ReelGood.tools.ffmpeg.exe" />
+    <EmbeddedResource Include="tools\ffprobe.exe" LogicalName="ReelGood.tools.ffprobe.exe" />
+    <Content Include="tools\FFmpeg-GPLv3-LICENSE.txt;tools\FFmpeg-build-notes.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
   </ItemGroup>
 </Project>
+
