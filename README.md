@@ -4,7 +4,7 @@ ReelGood is a native Windows video review and editing prototype. It uses a famil
 
 ## Run the standalone Windows app
 
-Open `release\ReelGood.exe`. FFmpeg and FFprobe are embedded in the application and installed automatically to `%LOCALAPPDATA%\ReelGood\tools` the first time ReelGood starts. You do not need to select FFmpeg or keep a separate tools folder beside the app. The `release` folder is self-contained and does not need the .NET desktop runtime installed separately.
+Open `portable-release\ReelGood.exe`. FFmpeg and FFprobe are embedded in the application and installed automatically to `%LOCALAPPDATA%\ReelGood\tools` the first time ReelGood starts. You do not need to select FFmpeg or keep a separate tools folder beside the app. The published app is a self-contained Windows executable and does not need the .NET desktop runtime installed separately.
 
 ## Build from source
 
